@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { isNumber } from 'util';
 
 export class EmptyTree {
   public toString() {
@@ -10,8 +10,7 @@ export class EmptyTree {
   }
 }
 
-@Injectable({providedIn: 'root'})
-export class JxonService {
+export class Jxon {
 
   private opts = {
     valueKey:            '_',
@@ -24,7 +23,7 @@ export class JxonService {
     parseValues:         false
   };
   private aCache = [];
-  private DOMParser;
+  private isNodeJs = false;
 
   public config(opts) {
     this.opts = opts;
@@ -35,22 +34,12 @@ export class JxonService {
     return this.xmlToJs(xmlObj);
   }
 
-  public stringify(oObjTree, sNamespaceURI /* optional */, sQualifiedName /* optional */, oDocumentType /* optional */): string {
-    return this.jsToString(oObjTree, sNamespaceURI /* optional */, sQualifiedName /* optional */, oDocumentType /* optional */)
+  public stringify(oObjTree: any, sNamespaceURI?: string, sQualifiedName?: string, oDocumentType?: DocumentType): string {
+    return this.jsToString(oObjTree, sNamespaceURI, sQualifiedName, oDocumentType);
   }
 
-  public jsToString(oObjTree, sNamespaceURI /* optional */, sQualifiedName /* optional */, oDocumentType /* optional */): string {
-    return this.xmlToString(
-      this.jsToXml(oObjTree, sNamespaceURI, sQualifiedName, oDocumentType)
-    );
-  }
-
-  public each(arr, func, thisArg) {
-    if (arr instanceof Array) {
-      arr.forEach(func, thisArg);
-    } else {
-      [arr].forEach(func, thisArg);
-    }
+  public jsToString(oObjTree: any, sNamespaceURI?: string, sQualifiedName?: string, oDocumentType?: DocumentType): string {
+    return this.xmlToString(this.jsToXml(oObjTree, sNamespaceURI, sQualifiedName, oDocumentType));
   }
 
   private parseText(sValue) {
@@ -81,8 +70,16 @@ export class JxonService {
     return sValue;
   }
 
-  private objectify(vValue) {
-    return vValue === null ? new EmptyTree() : vValue instanceof Object ? vValue : new vValue.constructor(vValue);
+  private objectify(value) {
+    if (value === null) {
+      return new EmptyTree();
+    } else {
+      if (value instanceof Object) {
+        return value;
+      } else {
+        return new value.constructor(value);
+      }
+    }
   }
 
   private createObjTree(oParentNode, nVerb, bFreeze, bNesteAttr) {
@@ -93,23 +90,17 @@ export class JxonService {
     const bChildren = oParentNode.hasChildNodes();
     const bAttributes = oParentNode.nodeType === oParentNode.ELEMENT_NODE && oParentNode.hasAttributes();
     const bHighVerb = Boolean(nVerb & 2);
-    let nLength = 0;
     let sCollectedTxt = '';
     let vResult = bHighVerb ? {} : /* put here the default value for empty nodes: */ (this.opts.trueIsEmpty ? true : '');
-    let sProp;
-    let vContent;
 
     if (bChildren) {
       for (let oNode, nItem = 0; nItem < oParentNode.childNodes.length; nItem++) {
-
         oNode = oParentNode.childNodes.item(nItem);
         if (oNode.nodeType === CDATA) {
           sCollectedTxt += oNode.nodeValue;
-        } /* nodeType is "CDATASection" (4) */
-        else if (oNode.nodeType === TEXT) {
+        } else if (oNode.nodeType === TEXT) {
           sCollectedTxt += oNode.nodeValue.trim();
-        } /* nodeType is "Text" (3) */
-        else if (oNode.nodeType === ELEMENT && !(this.opts.ignorePrefixedNodes && oNode.prefix)) {
+        } else if (oNode.nodeType === ELEMENT && !(this.opts.ignorePrefixedNodes && oNode.prefix)) {
           this.aCache.push(oNode);
         }
         /* nodeType is "Element" (1) */
@@ -123,14 +114,16 @@ export class JxonService {
       vResult = nVerb === 0 ? this.objectify(vBuiltVal) : {};
     }
 
+    let nLength = 0;
+
     for (let nElId = nLevelStart; nElId < nLevelEnd; nElId++) {
 
-      sProp = this.aCache[nElId].nodeName;
+      let sProp = this.aCache[nElId].nodeName;
       if (this.opts.lowerCaseTags) {
         sProp = sProp.toLowerCase();
       }
 
-      vContent = this.createObjTree(this.aCache[nElId], nVerb, bFreeze, bNesteAttr);
+      const vContent = this.createObjTree(this.aCache[nElId], nVerb, bFreeze, bNesteAttr);
       if (vResult.hasOwnProperty(sProp)) {
         if (vResult[sProp].constructor !== Array) {
           vResult[sProp] = [vResult[sProp]];
@@ -188,8 +181,8 @@ export class JxonService {
   }
 
   private loadObjTree(oXMLDoc, oParentEl, oParentObj) {
+
     let vValue;
-    let oChild;
     let elementNS;
 
     if (oParentObj.constructor === String || oParentObj.constructor === Number || oParentObj.constructor === Boolean) {
@@ -211,7 +204,7 @@ export class JxonService {
         vValue = {};
       }
 
-      if (isFinite(sName) || vValue instanceof Function) {
+      if (isNumber(sName) || vValue instanceof Function) {
         continue;
       }
 
@@ -226,7 +219,7 @@ export class JxonService {
           oParentEl.setAttribute(sAttrib, vValue[sAttrib]);
         }
       } else if (sName === this.opts.attrPrefix + 'xmlns') {
-        if (isNodeJs) {
+        if (this.isNodeJs) {
           oParentEl.setAttribute(sName.slice(1), vValue);
         }
         // do nothing: special handling of xml namespaces is done via createElementNS()
@@ -238,64 +231,55 @@ export class JxonService {
             continue;
           }
           elementNS = (vValue[nItem] && vValue[nItem][this.opts.attrPrefix + 'xmlns']) || oParentEl.namespaceURI;
-          if (elementNS) {
-            oChild = oXMLDoc.createElementNS(elementNS, sName);
-          } else {
-            oChild = oXMLDoc.createElement(sName);
-          }
-
+          const oChild = elementNS ? oXMLDoc.createElementNS(elementNS, sName) : oXMLDoc.createElement(sName);
           this.loadObjTree(oXMLDoc, oChild, vValue[nItem] || {});
           oParentEl.appendChild(oChild);
         }
       } else {
         elementNS = (vValue || {})[this.opts.attrPrefix + 'xmlns'] || oParentEl.namespaceURI;
-        if (elementNS) {
-          oChild = oXMLDoc.createElementNS(elementNS, sName);
-        } else {
-          oChild = oXMLDoc.createElement(sName);
-        }
+        const oChild = elementNS ? oXMLDoc.createElementNS(elementNS, sName) : oXMLDoc.createElement(sName);
+
         if (vValue instanceof Object) {
           this.loadObjTree(oXMLDoc, oChild, vValue);
         } else if (vValue !== null && (vValue !== true || !this.opts.trueIsEmpty)) {
           oChild.appendChild(oXMLDoc.createTextNode(vValue.toString()));
         }
+
         oParentEl.appendChild(oChild);
       }
     }
   }
 
   private build(oXMLParent, nVerbosity?, bFreeze ?, bNesteAttributes ?) {
-    return this.xmlToJs(oXMLParent, nVerbosity , bFreeze, bNesteAttributes );
+    return this.xmlToJs(oXMLParent, nVerbosity, bFreeze, bNesteAttributes);
   }
 
   private xmlToJs(oXMLParent, nVerbosity?, bFreeze ?, bNesteAttributes ?) {
-    const _nVerb = arguments.length > 1 && typeof nVerbosity === 'number' ? nVerbosity & 3 : /* put here the default verbosity level: */ 1;
-    return this.createObjTree(oXMLParent, _nVerb, bFreeze || false, arguments.length > 3 ? bNesteAttributes : _nVerb === 3);
+    const nVerb = arguments.length > 1 && typeof nVerbosity === 'number' ? nVerbosity & 3 : /* put here the default verbosity level: */ 1;
+    return this.createObjTree(oXMLParent, nVerb, bFreeze || false, arguments.length > 3 ? bNesteAttributes : nVerb === 3);
   }
 
-  private unbuild(oObjTree, sNamespaceURI ?, sQualifiedName ?, oDocumentType ?) {
-    return this.jsToXml(oObjTree, sNamespaceURI , sQualifiedName , oDocumentType );
+  private unbuild(oObjTree, sNamespaceURI ?: string, sQualifiedName ?: string, oDocumentType ?: DocumentType) {
+    return this.jsToXml(oObjTree, sNamespaceURI, sQualifiedName, oDocumentType);
   }
 
-  private jsToXml(oObjTree, sNamespaceURI?, sQualifiedName?, oDocumentType ?) {
-    const documentImplementation = xmlDom.document && xmlDom.document.implementation || new xmlDom.DOMImplementation();
-    const oNewDoc = documentImplementation.createDocument(sNamespaceURI || null, sQualifiedName || '', oDocumentType || null);
+  private jsToXml(oObjTree, sNamespaceURI?: string, sQualifiedName?: string, oDocumentType ?: DocumentType) {
+
+    const oNewDoc = document.implementation.createDocument(sNamespaceURI || null, sQualifiedName || '', oDocumentType || null);
     this.loadObjTree(oNewDoc, oNewDoc.documentElement || oNewDoc, oObjTree);
     return oNewDoc;
   }
 
   private stringToXml(xmlStr) {
-    if (!DOMParser) {
-      DOMParser = new xmlDom.DOMParser();
-    }
-    return DOMParser.parseFromString(xmlStr, 'application/xml');
+    const parser = new DOMParser();
+    return parser.parseFromString(xmlStr, 'application/xml');
   }
 
   private xmlToString(xmlObj) {
     if (typeof xmlObj.xml !== 'undefined') {
       return xmlObj.xml;
     } else {
-      return (new xmlDom.XMLSerializer()).serializeToString(xmlObj);
+      return (new XMLSerializer()).serializeToString(xmlObj);
     }
   }
 

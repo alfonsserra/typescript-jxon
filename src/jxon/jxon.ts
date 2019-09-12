@@ -1,15 +1,3 @@
-import { isNumber } from 'util';
-
-export class EmptyTree {
-  public toString() {
-    return '';
-  }
-
-  public valueOf() {
-    return null;
-  }
-}
-
 export class Jxon {
 
   public static readonly CDATA = 4;
@@ -151,7 +139,7 @@ export class Jxon {
       if (vValue === undefined || vValue instanceof Function) {
         continue;
       }
-      if (isNumber(sName)) {
+      if (this.isConsideredANumber(sName)) {
         continue;
       }
 
@@ -217,6 +205,16 @@ export class Jxon {
       return xmlObj.xml;
     } else {
       return (new XMLSerializer()).serializeToString(xmlObj);
+    }
+  }
+
+  private isConsideredANumber(text: string) {
+
+    try {
+      const asANumber = Number(text);
+      return (!isNaN(asANumber));
+    } catch (e) {
+      return false;
     }
   }
 }

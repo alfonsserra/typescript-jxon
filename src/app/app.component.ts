@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import { Jxon } from '../jxon/jxon';
+import { isNumber } from 'util';
 
 class Patient {
   public name = 'Alf';
@@ -75,6 +76,5 @@ export class AppComponent {
       '    <name>Charlie</name>\n' +
       '    <name nick="yes">Mad Max</name>\n' +
       '</dogs>'));
-
   }
 }

@@ -76,5 +76,12 @@ export class AppComponent {
       '    <name>Charlie</name>\n' +
       '    <name nick="yes">Mad Max</name>\n' +
       '</dogs>'));
+
+
+    const obj=jxon.stringToJs('<age>12</age>');
+    console.log(obj.age);
+    console.log(typeof obj.age);
+
+
   }
 }

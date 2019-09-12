@@ -41,7 +41,7 @@ export class Jxon {
     if (rIsBool.test(sValue)) {
       return sValue.toLowerCase() === 'true';
     }
-    if (isFinite(sValue)) {
+    if (this.isConsideredANumber(sValue)) {
       return parseFloat(sValue);
     }
     if (this.opts.autoDate && isFinite(Date.parse(sValue))) {
